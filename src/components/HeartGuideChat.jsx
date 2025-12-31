@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, MessageSquare, Plus, Trash2, Heart, Crown, Play, LogOut, Mail, Lock, Check, CreditCard, Smartphone, Wallet, ArrowLeft } from 'lucide-react';
+import { Send, MessageSquare, Plus, Trash2, Heart, Crown, Play, LogOut, Mail, Lock, Check, CreditCard, Smartphone, Wallet, ArrowLeft, AlertCircle } from 'lucide-react';
 
 export default function HeartGuideChat() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -17,10 +17,14 @@ export default function HeartGuideChat() {
   const [showAdModal, setShowAdModal] = useState(false);
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
+  const [guestMessageCount, setGuestMessageCount] = useState(0);
   const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
 
   const FREE_MESSAGE_LIMIT = 15;
+  const GUEST_MESSAGE_LIMIT = 3;
 
   const plans = {
     free: {
@@ -53,10 +57,15 @@ export default function HeartGuideChat() {
           const sessionAge = Date.now() - new Date(session.timestamp).getTime();
           if (sessionAge < 30 * 24 * 60 * 60 * 1000) {
             loginUser(session.email, session.password, true);
+          } else {
+            createInitialChat();
           }
+        } else {
+          createInitialChat();
         }
       } catch (e) {
         console.error('Session check error:', e);
+        createInitialChat();
       }
     };
     checkSession();
@@ -109,7 +118,9 @@ export default function HeartGuideChat() {
       setCurrentUser(userData);
       setMessageCount(0);
       setUserTier('free');
-      createInitialChat();
+      setShowAuthModal(false);
+      setEmail('');
+      setPassword('');
     } catch (error) {
       setAuthError('Signup failed');
     }
@@ -141,6 +152,9 @@ export default function HeartGuideChat() {
       setCurrentUser(userData);
       setMessageCount(userData.messageCount || 0);
       setUserTier(userData.userTier || 'free');
+      setShowAuthModal(false);
+      setEmail('');
+      setPassword('');
       loadUserConversations(loginEmail.toLowerCase());
     } catch (error) {
       setAuthError('Login failed');
@@ -153,6 +167,8 @@ export default function HeartGuideChat() {
     setConversations([]);
     setEmail('');
     setPassword('');
+    setGuestMessageCount(0);
+    createInitialChat();
   };
 
   const loadUserConversations = (userEmail) => {
@@ -231,7 +247,14 @@ export default function HeartGuideChat() {
   const handleSend = () => {
     if (!input.trim() || loading) return;
 
-    if (userTier === 'free' && messageCount >= FREE_MESSAGE_LIMIT) {
+    // Check if guest has exceeded limit
+    if (!currentUser && guestMessageCount >= GUEST_MESSAGE_LIMIT) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    // Check if logged-in free user has exceeded limit
+    if (currentUser && userTier === 'free' && messageCount >= FREE_MESSAGE_LIMIT) {
       setShowPaywall(true);
       return;
     }
@@ -250,7 +273,10 @@ export default function HeartGuideChat() {
       updateChatTitle(currentConvId, userMessage);
     }
 
-    if (userTier === 'free') {
+    // Increment appropriate message counter
+    if (!currentUser) {
+      setGuestMessageCount(prev => prev + 1);
+    } else if (userTier === 'free') {
       setMessageCount(prev => prev + 1);
     }
 
@@ -284,85 +310,93 @@ export default function HeartGuideChat() {
     alert(`Welcome to ${selectedPlan === 'pro' ? 'Pro' : 'Pro Max'}!`);
   };
 
-  if (!currentUser) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-pink-50 to-purple-50">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4">
-          <div className="text-center mb-8">
-            <div className="bg-gradient-to-br from-pink-400 to-purple-500 p-4 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-              <Heart className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">HeartGuide</h1>
-            <p className="text-gray-600">Your relationship advice companion</p>
-          </div>
-
-          <div className="flex gap-2 mb-6 bg-gray-100 p-1 rounded-lg">
-            <button
-              onClick={() => { setAuthMode('login'); setAuthError(''); }}
-              className={`flex-1 py-2 rounded-md font-medium ${authMode === 'login' ? 'bg-white shadow-sm' : 'text-gray-600'}`}
-            >
-              Log In
-            </button>
-            <button
-              onClick={() => { setAuthMode('signup'); setAuthError(''); }}
-              className={`flex-1 py-2 rounded-md font-medium ${authMode === 'signup' ? 'bg-white shadow-sm' : 'text-gray-600'}`}
-            >
-              Sign Up
-            </button>
-          </div>
-
-          {authError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-              {authError}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="your@email.com"
-                  className="w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-pink-400 focus:outline-none"
-                  onKeyPress={(e) => e.key === 'Enter' && (authMode === 'login' ? loginUser() : signupUser())}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-pink-400 focus:outline-none"
-                  onKeyPress={(e) => e.key === 'Enter' && (authMode === 'login' ? loginUser() : signupUser())}
-                />
-              </div>
-              {authMode === 'signup' && <p className="mt-1 text-xs text-gray-500">At least 6 characters</p>}
-            </div>
-
-            <button
-              onClick={() => authMode === 'login' ? loginUser() : signupUser()}
-              className="w-full py-3 bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white font-medium rounded-lg"
-            >
-              {authMode === 'login' ? 'Log In' : 'Create Account'}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const isNewChat = currentConv && currentConv.messages.length === 1;
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-pink-100 to-purple-100">
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+            <div className="text-center mb-6">
+              <div className="bg-gradient-to-br from-pink-400 to-purple-500 p-4 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                <Heart className="w-8 h-8 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">Continue Your Journey</h2>
+              <p className="text-gray-600">Sign up to save your conversation history and get more messages</p>
+            </div>
+
+            <div className="flex gap-2 mb-6 bg-gray-100 p-1 rounded-lg">
+              <button
+                onClick={() => { setAuthMode('login'); setAuthError(''); }}
+                className={`flex-1 py-2 rounded-md font-medium ${authMode === 'login' ? 'bg-white shadow-sm' : 'text-gray-600'}`}
+              >
+                Log In
+              </button>
+              <button
+                onClick={() => { setAuthMode('signup'); setAuthError(''); }}
+                className={`flex-1 py-2 rounded-md font-medium ${authMode === 'signup' ? 'bg-white shadow-sm' : 'text-gray-600'}`}
+              >
+                Sign Up
+              </button>
+            </div>
+
+            {authError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                {authError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    className="w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-pink-400 focus:outline-none"
+                    onKeyPress={(e) => e.key === 'Enter' && (authMode === 'login' ? loginUser() : signupUser())}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-pink-400 focus:outline-none"
+                    onKeyPress={(e) => e.key === 'Enter' && (authMode === 'login' ? loginUser() : signupUser())}
+                  />
+                </div>
+                {authMode === 'signup' && <p className="mt-1 text-xs text-gray-500">At least 6 characters</p>}
+              </div>
+
+              <button
+                onClick={() => authMode === 'login' ? loginUser() : signupUser()}
+                className="w-full py-3 bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white font-medium rounded-lg"
+              >
+                {authMode === 'login' ? 'Log In' : 'Create Account'}
+              </button>
+
+              <button
+                onClick={() => setShowAuthModal(false)}
+                className="w-full py-2 text-gray-600 hover:text-gray-800 text-sm"
+              >
+                Continue as Guest
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showPricingModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-5xl w-full max-h-screen overflow-y-auto">
@@ -508,6 +542,7 @@ export default function HeartGuideChat() {
         </div>
       )}
 
+      {/* Sidebar */}
       <div className="w-64 bg-gradient-to-b from-pink-600 to-purple-700 text-white flex flex-col shadow-2xl">
         <div className="p-4 border-b border-pink-400 border-opacity-30">
           <button onClick={createNewChat} className="w-full flex items-center gap-3 px-4 py-3 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg backdrop-blur-sm transition-all">
@@ -515,7 +550,11 @@ export default function HeartGuideChat() {
             <span>New Chat</span>
           </button>
           
-          {userTier === 'free' && (
+          {!currentUser ? (
+            <div className="mt-3 px-3 py-2 bg-white bg-opacity-20 rounded-lg text-sm backdrop-blur-sm">
+              Guest: {guestMessageCount}/{GUEST_MESSAGE_LIMIT} messages
+            </div>
+          ) : userTier === 'free' && (
             <div className="mt-3 px-3 py-2 bg-white bg-opacity-20 rounded-lg text-sm backdrop-blur-sm">
               {messageCount}/{FREE_MESSAGE_LIMIT} messages
             </div>
@@ -537,7 +576,15 @@ export default function HeartGuideChat() {
         </div>
 
         <div className="p-4 border-t border-pink-400 border-opacity-30">
-          {userTier !== 'free' ? (
+          {!currentUser ? (
+            <button 
+              onClick={() => setShowAuthModal(true)} 
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg mb-3 transition-all backdrop-blur-sm"
+            >
+              <Mail className="w-4 h-4" />
+              <span className="text-sm font-semibold">Sign Up / Log In</span>
+            </button>
+          ) : userTier !== 'free' ? (
             <div className="flex items-center gap-2 px-3 py-2 bg-white bg-opacity-30 backdrop-blur-sm rounded-lg mb-3">
               <Crown className="w-4 h-4 text-yellow-300" />
               <span className="text-sm font-semibold">{userTier === 'pro' ? 'Pro' : 'Pro Max'}</span>
@@ -548,13 +595,16 @@ export default function HeartGuideChat() {
               <span className="text-sm font-semibold">Upgrade</span>
             </button>
           )}
-          <button onClick={logoutUser} className="w-full text-white text-opacity-80 hover:text-opacity-100 text-sm flex items-center justify-center gap-2 transition-all">
-            <LogOut className="w-4 h-4" />
-            <span className="truncate">{currentUser.email}</span>
-          </button>
+          {currentUser && (
+            <button onClick={logoutUser} className="w-full text-white text-opacity-80 hover:text-opacity-100 text-sm flex items-center justify-center gap-2 transition-all">
+              <LogOut className="w-4 h-4" />
+              <span className="truncate">{currentUser.email}</span>
+            </button>
+          )}
         </div>
       </div>
 
+      {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
         <div className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-6 py-4 shadow-lg">
           <h1 className="text-xl font-semibold flex items-center gap-2">
@@ -564,65 +614,125 @@ export default function HeartGuideChat() {
           <p className="text-sm text-pink-100">Your personal love & relationship coach</p>
         </div>
 
+        {/* Guest Warning Banner */}
+        {!currentUser && (
+          <div className="bg-amber-50 border-b border-amber-200 px-6 py-3">
+            <div className="max-w-3xl mx-auto flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm text-amber-800">
+                  <strong>Guest Mode:</strong> Your conversation history won't be saved. 
+                  <button 
+                    onClick={() => setShowAuthModal(true)}
+                    className="ml-2 text-amber-900 underline hover:text-amber-950 font-medium"
+                  >
+                    Sign up to save your chats
+                  </button>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-3xl mx-auto px-4 py-8">
-            {currentConv?.messages.map((msg, i) => (
-              <div key={i} className={`mb-8 flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                {msg.role === 'assistant' && (
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gradient-to-br from-pink-500 to-purple-600 shadow-lg">
-                    <Heart className="w-4 h-4 text-white" />
+          {isNewChat ? (
+            // Centered layout for new chat (ChatGPT style)
+            <div className="h-full flex flex-col items-center justify-center px-4">
+              <div className="w-full max-w-3xl">
+                <div className="text-center mb-8">
+                  <div className="bg-gradient-to-br from-pink-400 to-purple-500 p-6 rounded-full w-20 h-20 mx-auto mb-6 flex items-center justify-center shadow-xl">
+                    <Heart className="w-10 h-10 text-white" />
                   </div>
-                )}
-                <div className={`max-w-2xl ${msg.role === 'user' ? 'flex items-start gap-4' : ''}`}>
-                  <div className={`px-4 py-3 rounded-2xl ${msg.role === 'user' ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg' : 'bg-white border-2 border-pink-200 shadow-md'}`}>
-                    <p className="leading-relaxed">{msg.content}</p>
-                  </div>
-                  {msg.role === 'user' && (
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gradient-to-br from-purple-500 to-pink-500 shadow-lg">
-                      <span className="text-white text-sm font-bold">U</span>
+                  <h2 className="text-3xl font-bold text-gray-800 mb-3">How can I help you today?</h2>
+                  <p className="text-gray-600">Ask me anything about relationships, dating, or love advice</p>
+                </div>
+
+                {/* Centered Input */}
+                <div className="relative">
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
+                    placeholder="Message HeartGuide..."
+                    rows={1}
+                    className="w-full px-4 py-4 pr-14 border-2 border-pink-300 rounded-2xl resize-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 focus:outline-none shadow-lg"
+                    style={{minHeight:'56px', maxHeight: '200px'}}
+                  />
+                  <button
+                    onClick={handleSend}
+                    disabled={loading || !input.trim()}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed shadow-lg transition-all"
+                  >
+                    <Send className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            // Standard chat layout
+            <div className="max-w-3xl mx-auto px-4 py-8">
+              {currentConv?.messages.map((msg, i) => (
+                <div key={i} className={`mb-8 flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {msg.role === 'assistant' && (
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gradient-to-br from-pink-500 to-purple-600 shadow-lg flex-shrink-0">
+                      <Heart className="w-4 h-4 text-white" />
                     </div>
                   )}
+                  <div className={`max-w-2xl ${msg.role === 'user' ? 'flex items-start gap-4' : ''}`}>
+                    <div className={`px-4 py-3 rounded-2xl ${msg.role === 'user' ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg' : 'bg-white border-2 border-pink-200 shadow-md'}`}>
+                      <p className="leading-relaxed">{msg.content}</p>
+                    </div>
+                    {msg.role === 'user' && (
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gradient-to-br from-purple-500 to-pink-500 shadow-lg flex-shrink-0">
+                        <span className="text-white text-sm font-bold">U</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
 
-            {loading && (
-              <div className="mb-8 flex gap-4">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-lg">
-                  <Heart className="w-4 h-4 text-white" />
+              {loading && (
+                <div className="mb-8 flex gap-4">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-lg">
+                    <Heart className="w-4 h-4 text-white" />
+                  </div>
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{animationDelay:'150ms'}}></div>
+                    <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{animationDelay:'300ms'}}></div>
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{animationDelay:'150ms'}}></div>
-                  <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{animationDelay:'300ms'}}></div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
         </div>
 
-        <div className="bg-white border-t-2 border-pink-300 px-4 py-4 shadow-lg">
-          <div className="max-w-3xl mx-auto flex gap-3">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
-              placeholder="Share what's on your mind..."
-              rows={1}
-              className="flex-1 px-4 py-3 border-2 border-pink-300 rounded-xl resize-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 focus:outline-none"
-              style={{minHeight:'48px'}}
-            />
-            <button
-              onClick={handleSend}
-              disabled={loading || !input.trim()}
-              className="px-4 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white rounded-xl disabled:opacity-50 shadow-lg transition-all"
-              style={{width:'48px',height:'48px'}}
-            >
-              <Send className="w-5 h-5" />
-            </button>
+        {/* Bottom Input (only shown when not new chat) */}
+        {!isNewChat && (
+          <div className="bg-white border-t-2 border-pink-300 px-4 py-4 shadow-lg">
+            <div className="max-w-3xl mx-auto flex gap-3">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
+                placeholder="Share what's on your mind..."
+                rows={1}
+                className="flex-1 px-4 py-3 border-2 border-pink-300 rounded-xl resize-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 focus:outline-none"
+                style={{minHeight:'48px', maxHeight: '200px'}}
+              />
+              <button
+                onClick={handleSend}
+                disabled={loading || !input.trim()}
+                className="px-4 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white rounded-xl disabled:opacity-50 shadow-lg transition-all flex-shrink-0"
+                style={{width:'48px',height:'48px'}}
+              >
+                <Send className="w-5 h-5" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
