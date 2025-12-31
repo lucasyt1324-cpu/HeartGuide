@@ -244,7 +244,7 @@ export default function HeartGuideChat() {
 
   const currentConv = conversations.find(c => c.id === currentConvId);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim() || loading) return;
 
     // Check if guest has exceeded limit
@@ -282,8 +282,24 @@ export default function HeartGuideChat() {
 
     setLoading(true);
 
-    setTimeout(() => {
-      const aiResponse = "I hear you! Can you tell me more about what's been going on?";
+    try {
+      // Call the backend API
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: updatedConv.messages
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('API request failed');
+      }
+
+      const data = await response.json();
+      const aiResponse = data.response;
       
       setConversations(prev =>
         prev.map(c => c.id === currentConvId ? {
@@ -291,8 +307,20 @@ export default function HeartGuideChat() {
           messages: [...c.messages, { role: 'assistant', content: aiResponse }]
         } : c)
       );
+    } catch (error) {
+      console.error('Error calling AI:', error);
+      
+      // Show error message to user
+      const errorMessage = "I'm having trouble connecting right now. Please try again in a moment.";
+      setConversations(prev =>
+        prev.map(c => c.id === currentConvId ? {
+          ...c,
+          messages: [...c.messages, { role: 'assistant', content: errorMessage }]
+        } : c)
+      );
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   const handlePlanSelect = (plan) => {
